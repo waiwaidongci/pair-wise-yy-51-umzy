@@ -22,7 +22,7 @@ import type { RoutePackage } from '../types'
         <article class="card metric"><span>待审批路径</span><strong>{{ (state$ | async)?.routes?.length || 0 }}</strong><small>今日新增 2 条</small></article>
         <article class="card metric"><span>高风险区段</span><strong class="risk-high">{{ highRiskCount }}</strong><small>需安全与应急会签</small></article>
         <article class="card metric"><span>许可缺失</span><strong class="risk-mid">1</strong><small>不得进入审批通过态</small></article>
-        <article class="card metric"><span>当前草案</span><strong>v{{ (state$ | async)?.version }}</strong><small>修改均进入审计记录</small></article>
+        <article class="card metric"><span>当前草案</span><strong>v{{ currentVersion }}</strong><small>修订均递增路径版本</small></article>
       </div>
       @if ((state$ | async)?.loading) { <mat-progress-bar mode="indeterminate" /> }
       <div class="grid-2">
@@ -61,8 +61,9 @@ export class WorkspaceComponent implements OnInit {
   readonly columns = ['id', 'cargo', 'route', 'permission', 'score', 'action']
   selectedId = ''
   highRiskCount = 0
+  currentVersion = 0
 
-  constructor() { this.state$.subscribe((state) => { this.selectedId = state.selectedRouteId; this.highRiskCount = state.routes.flatMap((route: RoutePackage) => route.segments).filter((segment: RoutePackage['segments'][number]) => segment.level === '高').length }) }
+  constructor() { this.state$.subscribe((state) => { this.selectedId = state.selectedRouteId; this.currentVersion = state.routes.find((route: RoutePackage) => route.id === state.selectedRouteId)?.routeVersion ?? 0; this.highRiskCount = state.routes.flatMap((route: RoutePackage) => route.segments).filter((segment: RoutePackage['segments'][number]) => segment.level === '高').length }) }
   ngOnInit() { this.refresh() }
   refresh() { this.store.dispatch(RouteActions.loadRoutes()) }
   select(row: RoutePackage) { this.store.dispatch(RouteActions.selectRoute({ id: row.id })) }

@@ -2,6 +2,7 @@ import { AfterViewInit, Component, ElementRef, OnDestroy, ViewChild, inject } fr
 import { CommonModule } from '@angular/common'
 import { FormsModule } from '@angular/forms'
 import { Store } from '@ngrx/store'
+import { map } from 'rxjs'
 import { MatButtonModule } from '@angular/material/button'
 import { MatSelectModule } from '@angular/material/select'
 import { MatFormFieldModule } from '@angular/material/form-field'
@@ -34,6 +35,16 @@ import * as RouteActions from '../store/route.actions'
             </button>
           }
           <mat-divider />
+          <h3>区段风险调整</h3>
+          @if (selectedSegment$ | async; as segment) {
+            <p>{{segment.id}} {{segment.name}} · 当前等级「{{segment.level}}」<small class="block">调整后路径版本 v{{selectedRoute?.routeVersion}} → v{{(selectedRoute?.routeVersion ?? 0) + 1}}</small></p>
+            <div class="level-actions">
+              <button mat-stroked-button [class.picked]="segment.level==='低'" (click)="setLevel('低')">低</button>
+              <button mat-stroked-button [class.picked]="segment.level==='中'" (click)="setLevel('中')">中</button>
+              <button mat-stroked-button color="warn" [class.picked]="segment.level==='高'" (click)="setLevel('高')">高</button>
+            </div>
+          }
+          <mat-divider />
           <h3>路径测算</h3><p>实测里程：{{routeLength}} km</p><p>预计运行：{{estimatedTime}}</p><p>限制区段：{{restrictedCount}} 处</p>
           <button mat-flat-button color="primary" style="width:100%" (click)="requireAlternative()">要求补充绕行方案</button>
         </aside>
@@ -42,6 +53,7 @@ import * as RouteActions from '../store/route.actions'
   `,
   styles: [`
     h2,h3{margin:0 0 10px}.panel-head{display:flex;justify-content:space-between}.segment{width:100%;display:flex;justify-content:space-between;text-align:left;gap:10px;padding:13px;margin:6px 0;border:1px solid #e1e7ef;background:#fff;border-radius:6px;color:inherit;cursor:pointer}.segment.active{border-color:#2563eb;background:#f5f8ff}.segment b,.segment small,.segment em{display:block}.segment small{color:#7a8798;margin:4px 0}.segment em{font-size:12px;color:#475569;font-style:normal}
+    .block{display:block;color:#7a8798;margin:4px 0}.level-actions{display:flex;gap:8px;margin:8px 0}.level-actions .picked{background:#2563eb;color:#fff;border-color:#2563eb}
   `],
 })
 export class RiskMapComponent implements AfterViewInit, OnDestroy {
@@ -54,6 +66,10 @@ export class RiskMapComponent implements AfterViewInit, OnDestroy {
   layers = { tunnel: true, bridge: true, water: true, population: true }
 
   get selectedRoute(): RoutePackage | undefined { let route: RoutePackage | undefined; this.state$.subscribe((state) => { route = state.routes.find((item: RoutePackage) => item.id === state.selectedRouteId) }).unsubscribe(); return route }
+  readonly selectedSegment$ = this.state$.pipe(map((state: RouteState) => {
+    const route = state.routes.find((item: RoutePackage) => item.id === state.selectedRouteId)
+    return route?.segments.find((segment) => segment.id === state.selectedSegmentId)
+  }))
   get routeLength() { return this.selectedRoute ? length(lineString(this.selectedRoute.segments.flatMap((segment) => segment.coordinates)), { units: 'kilometers' }).toFixed(1) : '0.0' }
   get estimatedTime() { return `${Math.round(Number(this.routeLength) / 55 * 60 + this.restrictedCount * 8)} 分钟` }
   get restrictedCount() { return this.selectedRoute?.segments.filter((segment) => segment.status === '需绕行').length ?? 0 }
@@ -71,6 +87,11 @@ export class RiskMapComponent implements AfterViewInit, OnDestroy {
   ngOnDestroy() { this.map?.remove() }
   selectRoute(id: string) { this.store.dispatch(RouteActions.selectRoute({ id })) }
   selectSegment(segment: RiskSegment) { this.store.dispatch(RouteActions.selectSegment({ id: segment.id })); this.map?.flyTo({ center: segment.coordinates[0], zoom: 8 }) }
+  setLevel(level: RiskSegment['level']) {
+    const route = this.selectedRoute
+    const segment = route?.segments.find((item) => item.id === this.selectedSegmentId)
+    if (route && segment && segment.level !== level) this.store.dispatch(RouteActions.updateSegmentLevel({ routeId: route.id, id: segment.id, level }))
+  }
   requireAlternative() { this.store.dispatch(RouteActions.createAlternative()) }
   fitRoute() { if (!this.map || !this.selectedRoute) return; const bounds = new LngLatBounds(); this.selectedRoute.segments.flatMap((segment) => segment.coordinates).forEach((point) => bounds.extend(point)); this.map.fitBounds(bounds, { padding: 50 }) }
   refreshLayers() { for (const [id, visible] of Object.entries(this.layers)) { if (this.map?.getLayer(id)) this.map.setLayoutProperty(id, 'visibility', visible ? 'visible' : 'none') } }
